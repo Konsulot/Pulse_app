@@ -20,8 +20,6 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
   bool _meridianSeeded = false;
   final Map<String, String> _stimulateCells = <String, String>{};
   final Map<String, String> _sedateCells = <String, String>{};
-  String _stimulateNextColor = 'redpink';
-  String _sedateNextColor = 'redpink';
 
   int _sumValue(Map<String, dynamic>? source, String prefix, {int maxIndex = 4}) {
     if (source == null) return 0;
@@ -75,7 +73,7 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
         'sedate': Map<String, String>.from(_sedateCells),
       };
 
-  void _loadMeridianSelection(dynamic raw, Map<String, String> target, void Function(String value) setNextColor) {
+  void _loadMeridianSelection(dynamic raw, Map<String, String> target) {
     target.clear();
 
     if (raw is Map) {
@@ -84,17 +82,14 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
         final color = entry.value.toString();
         target[id] = color == 'bluewhite' ? 'bluewhite' : 'redpink';
       }
-      setNextColor(target.length.isEven ? 'redpink' : 'bluewhite');
       return;
     }
 
     if (raw is List) {
-      var color = 'redpink';
       for (final item in raw) {
-        target[item.toString()] = color;
-        color = color == 'redpink' ? 'bluewhite' : 'redpink';
+        final id = item.toString();
+        target[id] = _colorKeyForMeridianCell(id);
       }
-      setNextColor(color);
     }
   }
 
@@ -103,8 +98,8 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
     _meridianSeeded = true;
     final actions = _keyValues(indexrecord)?['meridian_actions'];
     if (actions is Map<String, dynamic>) {
-      _loadMeridianSelection(actions['stimulate'], _stimulateCells, (value) => _stimulateNextColor = value);
-      _loadMeridianSelection(actions['sedate'], _sedateCells, (value) => _sedateNextColor = value);
+      _loadMeridianSelection(actions['stimulate'], _stimulateCells);
+      _loadMeridianSelection(actions['sedate'], _sedateCells);
     }
   }
 
@@ -293,6 +288,110 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
     }
   }
 
+  String _colorKeyForMeridianCell(String id) {
+    final isStimulate = id.startsWith('stimulate_');
+    final point = id.split('_').last;
+    const streamPoints = {
+      'P10',
+      'C8',
+      'MC8',
+      'RP2',
+      'F2',
+      'R2',
+      'GI2',
+      'IG2',
+      'TR2',
+      'E44',
+      'VB43',
+      'V66',
+    };
+    final isStream = streamPoints.contains(point);
+
+    if (isStimulate) {
+      return isStream ? 'bluewhite' : 'redpink';
+    }
+
+    return isStream ? 'redpink' : 'bluewhite';
+  }
+
+  static const Map<String, String> _pointImageByCode = {
+    'P': 'assets/images/points/P10_P5.png',
+    'C': 'assets/images/points/C8_C3.png',
+    'MC': 'assets/images/points/MC8_MC3.png',
+    'RP': 'assets/images/points/RP2_RP9.png',
+    'F': 'assets/images/points/F2_F8.png',
+    'R': 'assets/images/points/R2_R10.png',
+    'GI': 'assets/images/points/GI2_GI11.png',
+    'IG': 'assets/images/points/IG2_IG8.png',
+    'TR': 'assets/images/points/TR2_TR10.png',
+    'E': 'assets/images/points/E44_E36.png',
+    'VB': 'assets/images/points/VB43_VB34.png',
+    'V': 'assets/images/points/V66_V40.png',
+  };
+
+  void _showPointImage(String code) {
+    final assetPath = _pointImageByCode[code];
+    if (assetPath == null) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        final size = MediaQuery.of(context).size;
+
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: size.width * 0.95,
+            height: size.height * 0.8,
+            child: Column(
+              children: [
+                AppBar(
+                  automaticallyImplyLeading: false,
+                  title: Text('Точки $code'),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 5,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Image.asset(assetPath, fit: BoxFit.contain),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _meridianCodeCell(String code) {
+    return InkWell(
+      onTap: () => _showPointImage(code),
+      child: Container(
+        width: 44,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: const Color(0xFFC4D0D0), border: Border.all(color: Colors.black26)),
+        child: Text(
+          code,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+
   Widget _meridianSelectableCell({required String id, required String text, required Map<String, String> selected, required VoidCallback onTap, double width = 70}) {
     return InkWell(
       onTap: onTap,
@@ -340,12 +439,8 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
           setState(() {
             if (selected.containsKey(id)) {
               selected.remove(id);
-            } else if (kind == 'stimulate') {
-              selected[id] = _stimulateNextColor;
-              _stimulateNextColor = _stimulateNextColor == 'redpink' ? 'bluewhite' : 'redpink';
             } else {
-              selected[id] = _sedateNextColor;
-              _sedateNextColor = _sedateNextColor == 'redpink' ? 'bluewhite' : 'redpink';
+              selected[id] = _colorKeyForMeridianCell(id);
             }
           });
           _saveMeridianActions(calc: calc, indexrecord: indexrecord, foot: foot);
@@ -353,10 +448,10 @@ class _ExaminationMeridiansScreenState extends ConsumerState<ExaminationMeridian
 
         final prefix = '${kind}_$side';
         return Row(mainAxisSize: MainAxisSize.min, children: [
-          _box(w: 44, h: 40, color: const Color(0xFFC4D0D0), text: row['leftCode']!, weight: FontWeight.w700),
+          _meridianCodeCell(row['leftCode']!),
           _meridianSelectableCell(id: '${prefix}_${row['leftCode']}_${row['leftStream']}', text: row['leftStream']!, selected: selected, onTap: () => toggle('${prefix}_${row['leftCode']}_${row['leftStream']}')),
           _meridianSelectableCell(id: '${prefix}_${row['leftCode']}_${row['leftSea']}', text: row['leftSea']!, selected: selected, onTap: () => toggle('${prefix}_${row['leftCode']}_${row['leftSea']}')),
-          _box(w: 44, h: 40, color: const Color(0xFFC4D0D0), text: row['rightCode']!, weight: FontWeight.w700),
+          _meridianCodeCell(row['rightCode']!),
           _meridianSelectableCell(id: '${prefix}_${row['rightCode']}_${row['rightStream']}', text: row['rightStream']!, selected: selected, onTap: () => toggle('${prefix}_${row['rightCode']}_${row['rightStream']}')),
           _meridianSelectableCell(id: '${prefix}_${row['rightCode']}_${row['rightSea']}', text: row['rightSea']!, selected: selected, onTap: () => toggle('${prefix}_${row['rightCode']}_${row['rightSea']}')),
         ]);
